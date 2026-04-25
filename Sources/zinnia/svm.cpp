@@ -10,6 +10,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <random>
 #include "feature.h"
 
 namespace zinnia {
@@ -31,6 +32,7 @@ bool svm_train(size_t l,
   std::vector<double> QD(l);
   std::vector<size_t> index(l);
   std::vector<double> alpha(l);
+  std::mt19937 shuffle_engine(0);
 
   std::fill(w, w + n, 0.0);
   std::fill(alpha.begin(), alpha.end(), 0.0);
@@ -47,7 +49,7 @@ bool svm_train(size_t l,
   for (size_t iter = 0; iter < kMaxIteration; ++iter) {
     double PGmax_new = -kINF;
     double PGmin_new = kINF;
-    std::random_shuffle(index.begin(), index.begin() + active_size);
+    std::shuffle(index.begin(), index.begin() + active_size, shuffle_engine);
 
     for (size_t s = 0; s < active_size; ++s) {
       const size_t i = index[s];
