@@ -9,11 +9,15 @@ import Foundation
 
 #if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 
 public extension Point{
     init(cgPoint:CGPoint) {
-        self.x=Int(cgPoint.x)
-        self.y=Int(cgPoint.y)
+        // Preserve the existing truncation for finite coordinates. An unrepresentable
+        // value stays invalid so the recognizer rejects the character instead of
+        // silently moving a point to the origin or trapping during conversion.
+        self.x = Int(exactly: cgPoint.x.rounded(.towardZero)) ?? Int.max
+        self.y = Int(exactly: cgPoint.y.rounded(.towardZero)) ?? Int.max
     }
     
     var cgPoint:CGPoint{
@@ -23,8 +27,8 @@ public extension Point{
 
 public extension Recognizer.Size{
     init(cgSize:CGSize) {
-        self.width=Int(cgSize.width)
-        self.height=Int(cgSize.height)
+        self.width = Int(exactly: cgSize.width.rounded(.towardZero)) ?? 0
+        self.height = Int(exactly: cgSize.height.rounded(.towardZero)) ?? 0
     }
     
     var cgSize:CGSize{
@@ -37,5 +41,3 @@ public extension Stroke{
         self.add(point: Point(cgPoint: point))
     }
 }
-
-#endif

@@ -68,6 +68,11 @@ class warn {
 struct whatlog {
   std::ostringstream stream_;
   std::string str_;
+  std::ostringstream &clear() {
+    stream_.str(std::string());
+    stream_.clear();
+    return stream_;
+  }
   const char *str() {
     str_ = stream_.str();
     return str_.c_str();
@@ -78,7 +83,7 @@ struct whatlog {
 class wlog {
  public:
   whatlog *l_;
-  explicit wlog(whatlog *l): l_(l) { l_->stream_.clear(); }
+  explicit wlog(whatlog *l): l_(l) {}
   ~wlog() { longjmp(l_->cond_, 1); }
   int operator&(std::ostream &) { return 0; }
 };
@@ -91,7 +96,7 @@ class wlog {
     if (setjmp(what_.cond_) == 1) {                                     \
       return value;                                                     \
     } else                                                              \
-      wlog(&what_) & what_.stream_ <<                                   \
+      wlog(&what_) & what_.clear() <<                                   \
           __FILE__ << "(" << __LINE__ << ") [" << #condition << "] "
 
 #define CHECK_0(condition)      CHECK_RETURN(condition, 0)
@@ -103,7 +108,7 @@ class wlog {
       close();                                                          \
       return false;                                                     \
     } else                                                              \
-      wlog(&what_) & what_.stream_ <<                                   \
+      wlog(&what_) & what_.clear() <<                                   \
           __FILE__ << "(" << __LINE__ << ") [" << #condition << "] "
 
 #define CHECK_DIE(condition)                                            \
