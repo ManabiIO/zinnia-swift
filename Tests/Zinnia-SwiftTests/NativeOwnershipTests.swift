@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 @testable import Zinnia_Swift
 
 final class NativeOwnershipTests: XCTestCase {
@@ -37,6 +40,107 @@ final class NativeOwnershipTests: XCTestCase {
             XCTAssertEqual(recognizer.classify(), [])
             recognizer.add(stroke: Stroke(points: [Point(x: 50, y: 250), Point(x: 450, y: 250)]))
             XCTAssertEqual(recognizer.classify(maxResults: 0), [])
+        }
+    }
+
+    func testResultLimitsDoNotWrapToUnsignedCounts() throws {
+        try withModel { modelURL in
+            let recognizer = try Recognizer(
+                modelURL: modelURL,
+                canvasSize: Recognizer.Size(width: 500, height: 500)
+            )
+            recognizer.add(stroke: Stroke(points: [Point(x: 50, y: 250), Point(x: 450, y: 250)]))
+            for limit in [Int.min, -1, 0] {
+                XCTAssertEqual(recognizer.classify(maxResults: limit), [])
+            }
+            XCTAssertEqual(recognizer.classify(maxResults: 1).map { $0.character }, ["一"])
+            XCTAssertEqual(recognizer.classify(maxResults: Int.max).map { $0.character }, ["一", "中"])
+        }
+    }
+
+    func testInvalidCanvasSizesFailUntilValidSizeIsRestored() throws {
+        try withModel { modelURL in
+            let recognizer = try Recognizer(modelURL: modelURL)
+            recognizer.add(stroke: Stroke(points: [Point(x: 50, y: 250), Point(x: 450, y: 250)]))
+            let validSize = Recognizer.Size(width: 500, height: 500)
+            let invalidSizes = [
+                Recognizer.Size.zero,
+                Recognizer.Size(width: -1, height: 500),
+                Recognizer.Size(width: 500, height: -1),
+                Recognizer.Size(width: Int.max, height: 500),
+                Recognizer.Size(width: 500, height: Int.max)
+            ]
+            for size in invalidSizes {
+                recognizer.canvasSize = size
+                XCTAssertEqual(recognizer.classify(), [])
+                recognizer.canvasSize = validSize
+                XCTAssertEqual(recognizer.classify().map { $0.character }, ["一", "中"])
+            }
+        }
+    }
+
+    func testInvalidCoordinatesInvalidateTheWholeCharacterUntilClear() throws {
+        try withModel { modelURL in
+            let recognizer = try Recognizer(
+                modelURL: modelURL,
+                canvasSize: Recognizer.Size(width: 500, height: 500)
+            )
+            let validStroke = Stroke(points: [Point(x: 50, y: 250), Point(x: 450, y: 250)])
+            let expected = recognizer.classify(strokes: [validStroke])
+            XCTAssertFalse(expected.isEmpty)
+            let invalidPoints = [
+                Point(x: Int.max, y: 1), Point(x: Int.min, y: 1),
+                Point(x: 1, y: Int.max), Point(x: 1, y: Int.min)
+            ]
+            for point in invalidPoints {
+                recognizer.clear()
+                recognizer.add(stroke: validStroke)
+                recognizer.add(stroke: Stroke(points: [Point(x: 1, y: 1), point]))
+                XCTAssertEqual(recognizer.classify(), [])
+                recognizer.add(stroke: validStroke)
+                XCTAssertEqual(recognizer.classify(), [])
+                recognizer.clear()
+                recognizer.add(stroke: validStroke)
+                XCTAssertEqual(recognizer.classify(), expected)
+            }
+            let boundaryStroke = Stroke(points: [
+                Point(x: Int(Int32.min), y: Int(Int32.min)),
+                Point(x: Int(Int32.max), y: Int(Int32.max))
+            ])
+            XCTAssertEqual(recognizer.classify(strokes: [boundaryStroke]), expected)
+        }
+    }
+
+    func testCoreGraphicsConversionsRejectNonfiniteAndUnrepresentableValues() throws {
+        let finitePoint = Point(cgPoint: CGPoint(x: 10.9, y: -10.9))
+        XCTAssertEqual(finitePoint.x, 10)
+        XCTAssertEqual(finitePoint.y, -10)
+        let finiteSize = Recognizer.Size(cgSize: CGSize(width: 500.9, height: 500.9))
+        XCTAssertEqual(finiteSize, Recognizer.Size(width: 500, height: 500))
+
+        try withModel { modelURL in
+            let recognizer = try Recognizer(modelURL: modelURL, canvasSize: finiteSize)
+            let invalidValues: [CGFloat] = [.nan, .infinity, -.infinity, .greatestFiniteMagnitude]
+            for value in invalidValues {
+                for point in [CGPoint(x: value, y: 1), CGPoint(x: 1, y: value)] {
+                    XCTAssertEqual(recognizer.classify(strokes: [Stroke(start: Point(cgPoint: point))]), [])
+                }
+                for size in [CGSize(width: value, height: 500), CGSize(width: 500, height: value)] {
+                    recognizer.canvasSize = Recognizer.Size(cgSize: size)
+                    XCTAssertEqual(recognizer.classify(strokes: [Stroke(start: Point(x: 1, y: 1))]), [])
+                }
+                recognizer.canvasSize = finiteSize
+            }
+        }
+    }
+
+    func testNonFileModelURLsFailWithoutEnteringTheNativeLoader() throws {
+        let modelURL = try XCTUnwrap(URL(string: "https://example.invalid/handwriting.model"))
+        XCTAssertThrowsError(try Recognizer(modelURL: modelURL)) { error in
+            guard case Recognizer.RecognizerErrors.openingModelFailed(let failedURL, _) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(failedURL, modelURL)
         }
     }
 
@@ -120,7 +224,45 @@ final class NativeOwnershipTests: XCTestCase {
         }
     }
 
-    private func withModel<T>(trailingByte: Bool = false, _ body: (URL) throws -> T) throws -> T {
+    func testNonfiniteCoefficientsAndInvalidFeatureOrderingFailCleanly() throws {
+        try withModel(featureWeight: 1) { modelURL in
+            let validModel = try Data(contentsOf: modelURL)
+            var malformed = [Data]()
+            for value in [Float.nan, .infinity, -.infinity] {
+                for offset in [28, 36] {
+                    var data = validModel
+                    replaceWord(value.bitPattern, at: offset, in: &data)
+                    malformed.append(data)
+                }
+            }
+            var negativeIndex = validModel
+            replaceWord(UInt32.max - 1, at: 32, in: &negativeIndex)
+            malformed.append(negativeIndex)
+            var duplicateIndex = validModel
+            duplicateIndex.insert(contentsOf: validModel[32..<40], at: 40)
+            replaceWord(UInt32(duplicateIndex.count) ^ 0x0ef71821, at: 0, in: &duplicateIndex)
+            malformed.append(duplicateIndex)
+
+            for data in malformed {
+                try data.write(to: modelURL)
+                XCTAssertThrowsError(try Recognizer(modelURL: modelURL))
+            }
+            try validModel.write(to: modelURL)
+            let recognizer = try Recognizer(
+                modelURL: modelURL,
+                canvasSize: Recognizer.Size(width: 500, height: 500)
+            )
+            let result = recognizer.classify(strokes: [Stroke(start: Point(x: 250, y: 250))])
+            XCTAssertEqual(result.map { $0.character }, ["一", "中"])
+            XCTAssertEqual(result.map { $0.score }, [3, 2])
+        }
+    }
+
+    private func withModel<T>(
+        trailingByte: Bool = false,
+        featureWeight: Float? = nil,
+        _ body: (URL) throws -> T
+    ) throws -> T {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ZinniaOwnership-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -137,6 +279,10 @@ final class NativeOwnershipTests: XCTestCase {
             payload.append(contentsOf: utf8)
             payload.append(contentsOf: repeatElement(UInt8(0), count: 16 - utf8.count))
             append(score.bitPattern, to: &payload)
+            if let weight = featureWeight {
+                append(0, to: &payload)
+                append(weight.bitPattern, to: &payload)
+            }
             append(UInt32.max, to: &payload)
             append(0, to: &payload)
         }

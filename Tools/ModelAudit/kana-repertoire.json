@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "description": "Explicit NFC single-scalar output repertoire for Japanese handwriting. This audits classifier labels only; small/large, script, and voicing controls are separate input capabilities and must not be reported as recognition of missing drawn labels.",
+  "groups": {
+    "hiragana-basic": {
+      "labels": "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん",
+      "required_for_modern_kana": true
+    },
+    "hiragana-voiced": {
+      "labels": "がぎぐげござじずぜぞだぢづでどばびぶべぼゔ",
+      "required_for_modern_kana": true
+    },
+    "hiragana-semi-voiced": {
+      "labels": "ぱぴぷぺぽ",
+      "required_for_modern_kana": true
+    },
+    "hiragana-small": {
+      "labels": "ぁぃぅぇぉっゃゅょゎ",
+      "required_for_modern_kana": true
+    },
+    "katakana-basic": {
+      "labels": "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン",
+      "required_for_modern_kana": true
+    },
+    "katakana-voiced": {
+      "labels": "ガギグゲゴザジズゼゾダヂヅデドバビブベボヴ",
+      "required_for_modern_kana": true
+    },
+    "katakana-semi-voiced": {
+      "labels": "パピプペポ",
+      "required_for_modern_kana": true
+    },
+    "katakana-small": {
+      "labels": "ァィゥェォッャュョヮヵヶ",
+      "required_for_modern_kana": true
+    },
+    "long-vowel-mark": {
+      "labels": "ー",
+      "required_for_modern_kana": true
+    },
+    "historic-kana": {
+      "labels": "ゐゑヰヱ",
+      "required_for_modern_kana": false
+    },
+    "hiragana-small-ka-ke": {
+      "labels": "ゕゖ",
+      "required_for_modern_kana": false
+    },
+    "katakana-extended-voicing": {
+      "labels": "ヷヸヹヺ",
+      "required_for_modern_kana": false
+    },
+    "iteration-marks": {
+      "labels": "ゝゞヽヾ",
+      "required_for_modern_kana": false
+    }
+  }
+}
