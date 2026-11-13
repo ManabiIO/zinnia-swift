@@ -82,22 +82,34 @@ public class Recognizer{
             throw RecognizerErrors.recognizerInitializationFailed
         }
         
-        try self.modelURL.withUnsafeFileSystemRepresentation({path in
-            let success=zinnia_recognizer_open(recognizer, path)
-            if success != 1{
-                if let error=zinnia_recognizer_strerror(recognizer){
-                    let errorString=String(cString: error)
-                    throw RecognizerErrors.openingModelFailed(url: modelURL, errorMessage:  errorString)
+        let character:OpaquePointer
+        do{
+            try self.modelURL.withUnsafeFileSystemRepresentation({path in
+                let success=zinnia_recognizer_open(recognizer, path)
+                if success != 1{
+                    if let error=zinnia_recognizer_strerror(recognizer){
+                        let errorString=String(cString: error)
+                        throw RecognizerErrors.openingModelFailed(url: modelURL, errorMessage:  errorString)
+                    }
+                    else{
+                        throw RecognizerErrors.openingModelFailed(url: modelURL, errorMessage: nil)
+                    }
                 }
-                else{
-                    throw RecognizerErrors.openingModelFailed(url: modelURL, errorMessage: nil)
-                }
-                
+            })
+            guard let newCharacter=zinnia_character_new() else{
+                throw RecognizerErrors.recognizerInitializationFailed
             }
-        })
+            character=newCharacter
+        }
+        catch{
+            // A throwing initializer cannot rely on deinit before its handles are stored.
+            // Destroy also closes any partially opened model and its mapping.
+            zinnia_recognizer_destroy(recognizer)
+            throw error
+        }
         
         self._recognizer = recognizer
-        self._currentCharacter = zinnia_character_new()
+        self._currentCharacter = character
         self.canvasSize=canvasSize
         zinnia_character_set_width(self._currentCharacter, canvasSize.width)
         zinnia_character_set_height(self._currentCharacter, canvasSize.height)
@@ -131,6 +143,7 @@ public class Recognizer{
      */
     public func classify(maxResults:Int = 10)->[Result]{
         guard let result=zinnia_recognizer_classify(self._recognizer, self._currentCharacter, maxResults) else {return [Result]()}
+        defer { zinnia_result_destroy(result) }
         
         let resultSize=zinnia_result_size(result)
         var results=[Result]()
