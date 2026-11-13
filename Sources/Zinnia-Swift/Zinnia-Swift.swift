@@ -129,6 +129,9 @@ public class Recognizer{
         - stroke:The stroke to be added
      */
     public func add(stroke:Stroke){
+        // Empty gestures must not advance the native stroke ID: a gap creates
+        // an empty native stroke and makes the whole character unrecognizable.
+        guard !stroke.points.isEmpty else { return }
         for point in stroke.points{
             zinnia_character_add(self._currentCharacter, self.currentStrokes.count, Int32(point.x), Int32(point.y))
         }

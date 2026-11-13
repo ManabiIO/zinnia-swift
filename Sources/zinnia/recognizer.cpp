@@ -101,13 +101,16 @@ const char *RecognizerImpl::value(size_t i) const {
 }
 
 bool RecognizerImpl::open(const char *filename) {
+  model_.clear();
   CHECK_FALSE(mmap_.open(filename))
       << "no such file or directory: " << filename;
-  model_.clear();
   return open(mmap_.begin(), mmap_.file_size());
 }
 
 bool RecognizerImpl::open(const char *p, size_t ptr_size) {
+  model_.clear();
+  CHECK_CLOSE_FALSE(p && ptr_size >= 3 * sizeof(unsigned int))
+      << "model file is broken";
   char *ptr = const_cast<char *>(p);
   const char *begin = ptr;
   const char *end = ptr + ptr_size;
@@ -124,23 +127,35 @@ bool RecognizerImpl::open(const char *p, size_t ptr_size) {
   unsigned int size = 0;
   read_static<unsigned int>(&ptr, &size);
 
+  // Every model needs a label, bias and at least a sentinel feature. Check
+  // the count before allocating or advancing through untrusted model bytes.
+  const size_t minimum_model_size = 16 + sizeof(float) + sizeof(FeatureNode);
+  CHECK_CLOSE_FALSE(size <= static_cast<size_t>(end - ptr) / minimum_model_size)
+      << "model file is broken";
   model_.resize(size);
   for (size_t i = 0; i < size; ++i) {
+    CHECK_CLOSE_FALSE(static_cast<size_t>(end - ptr) >= minimum_model_size)
+        << "model file is broken";
     Model &m = model_[i];
     m.character = read_ptr(&ptr, 16);
-    CHECK_CLOSE_FALSE(ptr < end) << "model file is broken";
+    CHECK_CLOSE_FALSE(std::memchr(m.character, '\0', 16))
+        << "model character is not null terminated";
     float bias = 0.0;
     read_static<float>(&ptr, &bias);
     m.bias = bias;
     m.x = const_cast<const FeatureNode *>
         (reinterpret_cast<FeatureNode *>(ptr));
-    size_t len = 0;
-    for (const FeatureNode *x = m.x; x->index != -1; ++x) ++len;
-    CHECK_CLOSE_FALSE(ptr < end) << "model file is broken";
-    ptr += sizeof(FeatureNode) * (len + 1);
+    for (;;) {
+      CHECK_CLOSE_FALSE(static_cast<size_t>(end - ptr) >= sizeof(FeatureNode))
+          << "model file is broken";
+      int index = 0;
+      std::memcpy(&index, ptr, sizeof(index));
+      ptr += sizeof(FeatureNode);
+      if (index == -1) break;
+    }
   }
 
-  CHECK_FALSE(static_cast<size_t>(ptr - begin) == ptr_size)
+  CHECK_CLOSE_FALSE(static_cast<size_t>(ptr - begin) == ptr_size)
       << "size of model file is invalid";
 
   return true;

@@ -40,9 +40,24 @@ final class NativeOwnershipTests: XCTestCase {
         }
     }
 
+    func testEmptyStrokesDoNotPoisonFollowingRecognition() throws {
+        try withModel { modelURL in
+            let recognizer = try Recognizer(
+                modelURL: modelURL,
+                canvasSize: Recognizer.Size(width: 500, height: 500)
+            )
+            let stroke = Stroke(points: [Point(x: 50, y: 250), Point(x: 450, y: 250)])
+            let expected = recognizer.classify(strokes: [stroke, stroke])
+            XCTAssertFalse(expected.isEmpty)
+            XCTAssertEqual(recognizer.classify(strokes: [Stroke(), stroke, Stroke(), stroke, Stroke()]), expected)
+            recognizer.add(stroke: stroke)
+            XCTAssertEqual(recognizer.classify(), expected)
+        }
+    }
+
     func testRepeatedModelFailuresPreserveErrorAfterNativeCleanup() throws {
-        // A valid model plus a trailing byte reaches the C parser's final failure path,
-        // which leaves its mapping open until the recognizer is destroyed.
+        // A valid model plus a trailing byte reaches the C parser's final failure path.
+        // The copied error must survive parser cleanup and recognizer destruction.
         try withModel(trailingByte: true) { modelURL in
             let missingURL = modelURL.appendingPathExtension("missing")
             for _ in 0..<1_000 {
@@ -59,6 +74,49 @@ final class NativeOwnershipTests: XCTestCase {
                     }
                 }
             }
+        }
+    }
+
+    func testTruncatedAndMalformedModelsFailCleanly() throws {
+        try withModel { modelURL in
+            let validModel = try Data(contentsOf: modelURL)
+            var malformed = (0..<validModel.count).map { length -> Data in
+                var data = Data(validModel.prefix(length))
+                if data.count >= 4 {
+                    replaceWord(UInt32(data.count) ^ 0x0ef71821, at: 0, in: &data)
+                }
+                return data
+            }
+
+            var excessiveCount = validModel
+            replaceWord(UInt32.max, at: 8, in: &excessiveCount)
+            malformed.append(excessiveCount)
+
+            var unterminatedLabel = validModel
+            unterminatedLabel.replaceSubrange(12..<28, with: repeatElement(UInt8(65), count: 16))
+            malformed.append(unterminatedLabel)
+
+            var missingSentinel = validModel
+            replaceWord(1, at: missingSentinel.count - 8, in: &missingSentinel)
+            malformed.append(missingSentinel)
+
+            var partialFeature = missingSentinel
+            append(0, to: &partialFeature)
+            replaceWord(UInt32(partialFeature.count) ^ 0x0ef71821, at: 0, in: &partialFeature)
+            malformed.append(partialFeature)
+
+            for data in malformed {
+                try data.write(to: modelURL)
+                XCTAssertThrowsError(try Recognizer(modelURL: modelURL)) { error in
+                    guard case Recognizer.RecognizerErrors.openingModelFailed(_, let message) = error else {
+                        return XCTFail("Unexpected error: \(error)")
+                    }
+                    XCTAssertFalse(message?.isEmpty ?? true)
+                }
+            }
+
+            try validModel.write(to: modelURL)
+            XCTAssertNoThrow(try Recognizer(modelURL: modelURL))
         }
     }
 
@@ -95,5 +153,10 @@ final class NativeOwnershipTests: XCTestCase {
     private func append(_ value: UInt32, to data: inout Data) {
         var littleEndian = value.littleEndian
         withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+    }
+
+    private func replaceWord(_ value: UInt32, at offset: Int, in data: inout Data) {
+        var littleEndian = value.littleEndian
+        withUnsafeBytes(of: &littleEndian) { data.replaceSubrange(offset..<(offset + 4), with: $0) }
     }
 }
