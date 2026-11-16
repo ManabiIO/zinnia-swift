@@ -14,6 +14,8 @@ public func allTests() -> [XCTestCaseEntry] {
             ("testRepeatedRecognitionReturnsOwnedSwiftValues",
                 NativeOwnershipTests.testRepeatedRecognitionReturnsOwnedSwiftValues),
             ("testNoNativeResultIsSafe", NativeOwnershipTests.testNoNativeResultIsSafe),
+            ("testDenseValidStrokesKeepFeatureExtractionBounded",
+                NativeOwnershipTests.testDenseValidStrokesKeepFeatureExtractionBounded),
             ("testResultLimitsDoNotWrapToUnsignedCounts",
                 NativeOwnershipTests.testResultLimitsDoNotWrapToUnsignedCounts),
             ("testInvalidCanvasSizesFailUntilValidSizeIsRestored",

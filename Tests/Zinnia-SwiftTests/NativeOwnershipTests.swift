@@ -43,6 +43,23 @@ final class NativeOwnershipTests: XCTestCase {
         }
     }
 
+    func testDenseValidStrokesKeepFeatureExtractionBounded() throws {
+        try withModel(featureWeight: 1) { modelURL in
+            let recognizer = try Recognizer(
+                modelURL: modelURL,
+                canvasSize: Recognizer.Size(width: 500, height: 500)
+            )
+            for count in [24, 120, 4_096] {
+                let points = (0..<count).map { index in
+                    Point(x: 10 + 480 * index / (count - 1), y: index.isMultiple(of: 2) ? 30 : 470)
+                }
+                let result = recognizer.classify(strokes: [Stroke(points: points)])
+                XCTAssertEqual(result.map { $0.character }, ["一", "中"])
+                XCTAssertEqual(result.map { $0.score }, [3, 2])
+            }
+        }
+    }
+
     func testResultLimitsDoNotWrapToUnsignedCounts() throws {
         try withModel { modelURL in
             let recognizer = try Recognizer(

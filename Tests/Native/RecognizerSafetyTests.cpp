@@ -175,6 +175,23 @@ int main(int argc, char **argv) {
 
   for (size_t i = 0; i < 1000; ++i) expect_valid(recognizer.get(), character.get());
 
+  // Valid dense strokes used to build an exponentially sized vertex vector
+  // before its unused tail was discarded during feature emission. The fixed
+  // extractor bounds that tree while preserving all emitted feature indices.
+  // This exercises the full C API, including the recognizer and result owner.
+  for (size_t count : {size_t(24), size_t(120), size_t(4096)}) {
+    zinnia_character_clear(character.get());
+    zinnia_character_set_width(character.get(), 500);
+    zinnia_character_set_height(character.get(), 500);
+    for (size_t i = 0; i < count; ++i) {
+      const int x = static_cast<int>(10 + 480 * i / (count - 1));
+      const int y = i % 2 == 0 ? 30 : 470;
+      require(zinnia_character_add(character.get(), 0, x, y) == 1,
+              "in-bounds zigzag point adds");
+    }
+    expect_valid(recognizer.get(), character.get());
+  }
+
   zinnia_character_clear(character.get());
   zinnia_character_set_width(character.get(), 1);
   zinnia_character_set_height(character.get(), 1);
@@ -209,6 +226,6 @@ int main(int argc, char **argv) {
 
   std::cout << "PASS: " << malformed_count
             << " malformed models; unaligned buffers; finite scores; null paths; recovery; "
-            << "1000 result lifetimes; 1000 failed opens" << std::endl;
+            << "1000 result lifetimes; 1000 failed opens; bounded dense-stroke features" << std::endl;
   return 0;
 }
