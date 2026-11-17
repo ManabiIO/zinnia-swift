@@ -180,6 +180,12 @@ void Features::makeVertexFeature(int sid,
 void Features::getVertex(const Node *first, const Node *last,
                          int id,
                          std::vector<NodePair> *node_pairs) const {
+  // makeVertexFeature emits only indices 0...kMaxCharacterSize. Descendants
+  // beyond that range cannot affect an emitted feature. Prune before resizing:
+  // an unbalanced split otherwise grows this heap-indexed vector exponentially
+  // for an ordinary in-bounds zigzag stroke, even with only a few dozen points.
+  if (static_cast<size_t>(id) > kMaxCharacterSize) return;
+
   if (node_pairs->size() <= static_cast<size_t>(id))
     node_pairs->resize(id + 1);
 

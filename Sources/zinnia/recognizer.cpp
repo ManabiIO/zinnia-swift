@@ -13,12 +13,40 @@
 #include <cmath>
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include "common.h"
 #include "mmap.h"
 #include "zinnia.h"
 #include "feature.h"
 
 namespace {
+
+inline bool finite_float(float value) {
+  const float limit = std::numeric_limits<float>::max();
+  return value >= -limit && value <= limit;
+}
+
+// open_from_ptr accepts byte buffers, whose feature records need not have native
+// alignment. Copy each record before reading it, retaining the mapped model's
+// storage and the original scoring arithmetic without an additional model copy.
+inline double dot_model(const char *model, const zinnia::FeatureNode *input) {
+  double sum = 0;
+  while (input->index >= 0) {
+    zinnia::FeatureNode feature;
+    std::memcpy(&feature, model, sizeof(feature));
+    if (feature.index < 0) break;
+    if (feature.index == input->index) {
+      sum += feature.value * input->value;
+      model += sizeof(feature);
+      ++input;
+    } else if (feature.index < input->index) {
+      model += sizeof(feature);
+    } else {
+      ++input;
+    }
+  }
+  return sum;
+}
 
 static inline char *read_ptr(char **ptr, size_t size) {
   char *r = *ptr;
@@ -88,8 +116,10 @@ class RecognizerImpl: public Recognizer {
   struct Model {
     const char *character;
     float bias;
-    const FeatureNode *x;
+    const char *x;
   };
+
+  bool open_model(const char *ptr, size_t size);
 
   Mmap<char> mmap_;
   std::vector<Model> model_;
@@ -101,13 +131,22 @@ const char *RecognizerImpl::value(size_t i) const {
 }
 
 bool RecognizerImpl::open(const char *filename) {
+  close();
+  CHECK_FALSE(filename && *filename) << "invalid model file path";
   CHECK_FALSE(mmap_.open(filename))
       << "no such file or directory: " << filename;
-  model_.clear();
-  return open(mmap_.begin(), mmap_.file_size());
+  return open_model(mmap_.begin(), mmap_.file_size());
 }
 
 bool RecognizerImpl::open(const char *p, size_t ptr_size) {
+  close();
+  return open_model(p, ptr_size);
+}
+
+bool RecognizerImpl::open_model(const char *p, size_t ptr_size) {
+  CHECK_CLOSE_FALSE(p && ptr_size >= 3 * sizeof(unsigned int)
+                    && ptr_size <= std::numeric_limits<unsigned int>::max())
+      << "model file is broken";
   char *ptr = const_cast<char *>(p);
   const char *begin = ptr;
   const char *end = ptr + ptr_size;
@@ -124,23 +163,39 @@ bool RecognizerImpl::open(const char *p, size_t ptr_size) {
   unsigned int size = 0;
   read_static<unsigned int>(&ptr, &size);
 
+  // Every model needs a label, bias and at least a sentinel feature. Check
+  // the count before allocating or advancing through untrusted model bytes.
+  const size_t minimum_model_size = 16 + sizeof(float) + sizeof(FeatureNode);
+  CHECK_CLOSE_FALSE(size <= static_cast<size_t>(end - ptr) / minimum_model_size)
+      << "model file is broken";
   model_.resize(size);
   for (size_t i = 0; i < size; ++i) {
+    CHECK_CLOSE_FALSE(static_cast<size_t>(end - ptr) >= minimum_model_size)
+        << "model file is broken";
     Model &m = model_[i];
     m.character = read_ptr(&ptr, 16);
-    CHECK_CLOSE_FALSE(ptr < end) << "model file is broken";
+    CHECK_CLOSE_FALSE(m.character[0] && std::memchr(m.character, '\0', 16))
+        << "model character is empty or not null terminated";
     float bias = 0.0;
     read_static<float>(&ptr, &bias);
+    CHECK_CLOSE_FALSE(finite_float(bias)) << "model bias is not finite";
     m.bias = bias;
-    m.x = const_cast<const FeatureNode *>
-        (reinterpret_cast<FeatureNode *>(ptr));
-    size_t len = 0;
-    for (const FeatureNode *x = m.x; x->index != -1; ++x) ++len;
-    CHECK_CLOSE_FALSE(ptr < end) << "model file is broken";
-    ptr += sizeof(FeatureNode) * (len + 1);
+    m.x = ptr;
+    int previous_index = -1;
+    for (;;) {
+      CHECK_CLOSE_FALSE(static_cast<size_t>(end - ptr) >= sizeof(FeatureNode))
+          << "model file is broken";
+      FeatureNode feature;
+      std::memcpy(&feature, ptr, sizeof(feature));
+      ptr += sizeof(FeatureNode);
+      if (feature.index == -1) break;
+      CHECK_CLOSE_FALSE(feature.index > previous_index && finite_float(feature.value))
+          << "model features are invalid";
+      previous_index = feature.index;
+    }
   }
 
-  CHECK_FALSE(static_cast<size_t>(ptr - begin) == ptr_size)
+  CHECK_CLOSE_FALSE(static_cast<size_t>(ptr - begin) == ptr_size)
       << "size of model file is invalid";
 
   return true;
@@ -164,11 +219,18 @@ Result *RecognizerImpl::classify(const Character &character,
   }
   const FeatureNode *x = feature.get();
 
-  std::vector<std::pair<float, const char*> > results(size());
+  std::vector<std::pair<float, const char*> > results;
+  results.reserve(size());
   for (size_t i = 0; i < model_.size(); ++i) {
-    results[i].first  = model_[i].bias + dot(model_[i].x, x);
-    results[i].second = model_[i].character;
+    const double score = model_[i].bias + dot_model(model_[i].x, x);
+    const float limit = std::numeric_limits<float>::max();
+    // Finite model coefficients can still overflow when combined. Nonfinite
+    // scores cannot participate in the strict ordering required by partial_sort.
+    if (!(score >= -limit && score <= limit)) continue;
+    results.push_back(std::make_pair(static_cast<float>(score), model_[i].character));
   }
+
+  if (results.empty()) return 0;
 
   nbest = _min(nbest, results.size());
 

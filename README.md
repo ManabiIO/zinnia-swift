@@ -56,6 +56,26 @@ to start a new character.
 
 For a sample application, see [https://github.com/shinjukunian/KanjiLookup-SwiftUI](https://github.com/shinjukunian/KanjiLookup-SwiftUI).
 
+## Validation and model coverage
+
+Run the Swift ownership/input/parser regressions without a model fixture:
+
+```sh
+swift test --filter NativeOwnershipTests
+bash Scripts/test-native-safety.sh
+```
+
+The full `swift test` suite also exercises the original recognition fixtures
+and requires the real model at `Tests/Resources/handwriting-ja.model` (fetch
+the repository's Git LFS fixture or provide the verified model locally).
+The native safety script enables AddressSanitizer and UndefinedBehaviorSanitizer
+by default; see its `CXX` and `ZINNIA_SANITIZERS` options when selecting a compiler.
+
+Model labels determine what can be recognized. The shipping Manabi Japanese
+model has limited kana coverage. Use the [model audit](Tools/ModelAudit/README.md)
+to verify its exact weights, supported labels, missing kana, and corresponding
+source/license before making coverage claims or replacing an artifact.
+
 ## To Do
 - [ ] Implement training
 ~~- [ ] Sample application~~

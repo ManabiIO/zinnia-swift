@@ -1,0 +1,60 @@
+{
+  "artifact": {
+    "bytes": 26068668,
+    "format_version": 1,
+    "git_blob": "7a0793776b211fc6ef79711d2d00d0e25b0ab12a",
+    "label_count": 6420,
+    "label_inventory_sha256": "5a8b910bbfed953da9d1a815f7ff9679a728249ec0bd207939452ede2bcf5d7e",
+    "sha256": "d58618576d12c1ea38992606f30d19158a0a3beda3ac23bacccf1e48e651f2b2"
+  },
+  "consumer": {
+    "git_blob": "7a0793776b211fc6ef79711d2d00d0e25b0ab12a",
+    "path": "ManabiPlatform/Resources/zinnia.model",
+    "repository": "aehlke/manabi-reader"
+  },
+  "expected_scope": "Preserves the existing 6,356 CJK labels and weights; does not supply complete kana handwriting recognition.",
+  "license_document": {
+    "local_copy": "licenses/tegaki-model-COPYING",
+    "name": "GNU Lesser General Public License, version 2.1, as included in the upstream model distribution",
+    "note": "This record is specific to the trained model/source distribution. The Zinnia engine and Swift wrapper have separate licenses.",
+    "sha256": "a190dc9c8043755d90f8b0a75fa66b9e42d4af4c980bf5ddc633f0124db3cee7",
+    "source_archive_member": "tegaki-zinnia-japanese-0.3/COPYING"
+  },
+  "name": "Tegaki Zinnia Japanese 0.3, unchanged Manabi Reader weights",
+  "schema_version": 1,
+  "source_archive": {
+    "bytes": 18134281,
+    "members": {
+      "tegaki-zinnia-japanese-0.3/COPYING": {
+        "bytes": 26430,
+        "sha256": "a190dc9c8043755d90f8b0a75fa66b9e42d4af4c980bf5ddc633f0124db3cee7"
+      },
+      "tegaki-zinnia-japanese-0.3/Makefile": {
+        "bytes": 292,
+        "sha256": "552ee35f72c7e8992ca99ad7e3a05a44b2621cdf6d09fbdb5892830f906a94f2"
+      },
+      "tegaki-zinnia-japanese-0.3/handwriting-ja.meta": {
+        "bytes": 46,
+        "sha256": "0cf8d57336bf00e1168bbf23b7b9e445e1a90cf332ee71fc8493ef5046098d40"
+      },
+      "tegaki-zinnia-japanese-0.3/handwriting-ja.model": {
+        "bytes": 26068668,
+        "sha256": "d58618576d12c1ea38992606f30d19158a0a3beda3ac23bacccf1e48e651f2b2"
+      },
+      "tegaki-zinnia-japanese-0.3/handwriting-ja.xml": {
+        "bytes": 9155641,
+        "sha256": "6f30a4f42f24dc611f1a3e4d7a220c5009bb0323f237f01f50e3be3dfefb11f8"
+      }
+    },
+    "sha256": "07861bbb5440d74e705864721f12a5ce1c7f21a869f9c95ff21433d8994aafda",
+    "url": "https://github.com/tegaki/tegaki/releases/download/v0.3/tegaki-zinnia-japanese-0.3.zip"
+  },
+  "source_repository": {
+    "commit": "7a74e442c4130cccc226a7e7c2b683ac94c0cccb",
+    "model_makefile_git_blob": "88f51b10dd407f5304a8d66bf57c55c7c5f7e5d6",
+    "model_makefile_path": "tegaki-models/tegaki-zinnia-japanese/Makefile",
+    "training_xml_git_blob": "cf4fea59c15b2fb8c1375ebab5826549e8f16000",
+    "training_xml_path": "tegaki-models/data/train/japanese/handwriting-ja.xml",
+    "url": "https://github.com/tegaki/tegaki"
+  }
+}
